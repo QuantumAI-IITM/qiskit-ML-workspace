@@ -98,8 +98,6 @@ def ad_hoc_data(
     Returns:
         Training and testing samples.
 
-    Raises:
-        ValueError: if n is not 2 or 3.
     """
 
     if n>3: plot_data = False
@@ -266,4 +264,4 @@ def _phi_i(x_vecs: np.ndarray, i: int):
 def _phi_ij(x_vecs: np.ndarray, i: int, j: int):
     return ((np.pi - x_vecs[:,i])*(np.pi - x_vecs[:,j])).reshape((-1,1))
 
-print(ad_hoc_data(10,10,3,0.1,3))
+# print(ad_hoc_data(10,10,5,0.1,3))
