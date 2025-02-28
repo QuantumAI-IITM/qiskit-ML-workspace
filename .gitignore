@@ -127,3 +127,4 @@ venv.bak/
 
 # stestr repostiory
 .stestr/
+qiskit_machine_learning/datasets/ignore.py
