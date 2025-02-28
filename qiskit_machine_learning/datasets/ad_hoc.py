@@ -33,7 +33,7 @@ def ad_hoc_data(
     gap: int,
     divisions: int = 0,
     plot_data: bool = False,
-    one_hot: bool = True,
+    one_hot: bool = False,
     include_sample_total: bool = False,
 ) -> (
     Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
@@ -90,7 +90,7 @@ def ad_hoc_data(
             This defaults to zero which will set this to Sobol sampling.
             It's recommended to have a total number of datapoints = 2^n
             for Sobol sampling
-        plot_data: whether to plot the data. Requires matplotlib.
+        plot_data: whether to plot the data. Automatically disabled if n>3
         one_hot: if True, return the data in one-hot format.
         include_sample_total: if True, return all points in the uniform
             grid in addition to training and testing samples.
@@ -102,19 +102,21 @@ def ad_hoc_data(
         ValueError: if n is not 2 or 3.
     """
 
+    if n>3: plot_data = False
+
     # Initial State
     dims = 2**n
     psi_0 = np.ones(dims) / np.sqrt(dims)
 
     # n-qubit Hadamard
-    h_n = n_hadamard(n)
+    h_n = _n_hadamard(n)
 
     # Single qubit Z gates
     z_diags = np.array([np.diag(_i_z(i,n)).reshape((1,-1)) for i in range(n)])
 
     # Precompute Pairwise ZZ block diagonals
     zz_diags = {}
-    for (i, j) in combinations(range(n), 2):
+    for (i, j) in it.combinations(range(n), 2):
         zz_diags[(i, j)] = z_diags[i] * z_diags[j] 
 
     # n-qubit Z gate: notice that h_n[0,:] has the same elements as diagonal of z_n
@@ -154,7 +156,7 @@ def ad_hoc_data(
         
         # Since pre_exp is purely diagonal, exp(A) = diag(exp(Aii))
         post_exp = np.exp(1j * pre_exp)
-        Uphi = np.zeros((10, dims, dims), dtype = post_exp.dtype)
+        Uphi = np.zeros((n_samples, dims, dims), dtype = post_exp.dtype)
         cols = range(dims)
         Uphi[:,cols, cols] = post_exp[:, cols]
 
@@ -165,7 +167,7 @@ def ad_hoc_data(
         exp_val = np.real(Psi_dag @ O @ Psi).flatten()
         
         indx = np.abs(exp_val) > gap
-        count = np.count(indx)
+        count = np.sum(indx)
         features[cur:cur+count] = x_vecs[indx]
         labels[cur:cur+count] = np.sign(exp_val[indx])
 
@@ -174,27 +176,17 @@ def ad_hoc_data(
 
     if plot_data: _plot_ad_hoc_data(features, labels, train_size)
 
-    training_input = {key: (features[labels == key, :])[:training_size] for key in (1,-1)}
-    test_input = {key: (features[labels == key, :])[training_size:] for key in (1,-1)}
+    if one_hot:
+        labels = _onehot_labels(labels)
 
-    training_feature_array, training_label_array = _labels_transform(training_input, (1,-1), one_hot)
-    test_feature_array, test_label_array = _labels_transform(test_input, (1,-1), one_hot)
+    res = []
+    res.append(features[:train_size])
+    res.append(labels[:train_size])
+    res.append(features[train_size:])
+    res.append(labels[train_size:])
+    if include_sample_total: res.append(cur)
 
-    if include_sample_total:
-        return (
-            training_feature_array,
-            training_label_array,
-            test_feature_array,
-            test_label_array,
-            cur,
-        )
-    else:
-        return (
-            training_feature_array,
-            training_label_array,
-            test_feature_array,
-            test_label_array,
-        )
+    return tuple(res)
 
 
 @optionals.HAS_MATPLOTLIB.require_in_call
@@ -211,44 +203,11 @@ def _plot_ad_hoc_data(x_total, y_total, training_size):
     plt.show()
 
 
-def _labels_transform(
-    dataset: Dict[str, np.ndarray], class_labels: List[str], one_hot: bool = True
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Converts a dataset into arrays of features and labels.
-
-    Args:
-        dataset: A dictionary in the format of {'A': numpy.ndarray, 'B': numpy.ndarray, ...}
-        class_labels: A list of classes in the dataset
-        one_hot (bool): if True - return one-hot encoded label
-
-    Returns:
-        A tuple of features as np.ndarray, label as np.ndarray
-    """
-    features = np.concatenate(list(dataset.values()))
-
-    raw_labels = []
-    for category in dataset.keys():
-        num_samples = dataset[category].shape[0]
-        raw_labels += [category] * num_samples
-
-    if not raw_labels:
-        # no labels, empty dataset
-        labels = np.zeros((0, len(class_labels)))
-        return features, labels
-
-    if one_hot:
-        encoder = preprocessing.OneHotEncoder()
-        encoder.fit(np.array(class_labels).reshape(-1, 1))
-        labels = encoder.transform(np.array(raw_labels).reshape(-1, 1))
-        if not isinstance(labels, np.ndarray):
-            labels = np.array(labels.todense())
-    else:
-        encoder = preprocessing.LabelEncoder()
-        encoder.fit(np.array(class_labels))
-        labels = encoder.transform(np.array(raw_labels))
-
-    return features, labels
+def _onehot_labels(labels):
+    from sklearn.preprocessing import OneHotEncoder
+    encoder = OneHotEncoder(sparse_output=False)
+    labels_one_hot = encoder.fit_transform(labels.reshape(-1, 1))
+    return labels_one_hot
 
 def _n_hadamard(n: int):
     
@@ -307,4 +266,4 @@ def _phi_i(x_vecs: np.ndarray, i: int):
 def _phi_ij(x_vecs: np.ndarray, i: int, j: int):
     return ((np.pi - x_vecs[:,i])*(np.pi - x_vecs[:,j])).reshape((-1,1))
 
-print(ad_hoc_data(10,10,3,10,0))
+print(ad_hoc_data(10,10,3,0.1,3))
