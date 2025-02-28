@@ -1,5 +1,6 @@
 import numpy as np
 import functools as ft
+import itertools as it
 
 from scipy.stats.qmc import Sobol
 
@@ -58,11 +59,72 @@ def _modified_LHC(n:int, n_samples:int, n_div:int):
     return samples
 
 
-print(_modified_LHC(3, 10, 5))
+# print(_modified_LHC(3, 10, 5))
 
 def _sobol_sampling(n, n_samples):
     sampler = Sobol(d=n, scramble=True)
     p = 2*np.pi*sampler.random(n_samples)
     return p
 
-print(_sobol_sampling(3,10))
+# print(_sobol_sampling(3,10))
+
+x_vecs = _modified_LHC(3, 10, 5)
+
+
+n = 3
+# Single qubit Z gates
+z_diags = np.array([np.diag(_i_z(i,n)).reshape((1,-1)) for i in range(n)])
+
+# Precompute Pairwise ZZ block diagonals
+zz_diags = {}
+for (i, j) in it.combinations(range(n), 2):
+    zz_diags[(i, j)] = z_diags[i] * z_diags[j]
+
+def _phi_i(x_vecs: np.ndarray, i: int):
+    return x_vecs[:,i].reshape((-1,1))
+
+def _phi_ij(x_vecs: np.ndarray, i: int, j: int):
+    return ((np.pi - x_vecs[:,i])*(np.pi - x_vecs[:,j])).reshape((-1,1))
+
+
+pre_exp = np.zeros((10,8))
+
+ind_pairs = zz_diags.keys()
+
+dims = 8
+# First Order Terms
+for i in range(n):
+    pre_exp += _phi_i(x_vecs, i)*z_diags[i]
+# Second Order Terms 
+for (i,j) in ind_pairs:
+    pre_exp += _phi_ij(x_vecs, i, j)*zz_diags[(i,j)]
+
+# Since pre_exp is purely diagonal, exp(A) = diag(exp(Aii))
+post_exp = np.exp(1j * pre_exp)
+
+Uphi = np.zeros((10, dims, dims), dtype = post_exp.dtype)
+cols = range(dims)
+Uphi[:,cols, cols] = post_exp[:, cols]
+
+# print(Uphi)
+
+# V change of basis: Eigenbasis of a random hermitian will be a random unitary
+A = np.array(np.random.random((dims, )) 
+            + 1j * np.random.random((dims, dims)))
+Herm = A.conj().T @ A 
+eigvals, eigvecs = np.linalg.eig(Herm)
+idx = eigvals.argsort()[::-1]
+V = eigvecs[:, idx]
+
+# Observable for labelling boundary
+O = V.conj().T @ z_n @ V
+print(O.shape)
+
+dims = 2**n
+psi_0 = np.ones(dims) / np.sqrt(dims)
+Psi = (Uphi @ h_n @ Uphi @ psi_0).reshape((-1, dims, 1))
+Psi_dag = np.transpose(Psi.conj(), (0, 2, 1))
+exp_val = np.real(Psi_dag @ O @ Psi)
+
+
+print(exp_val.shape)

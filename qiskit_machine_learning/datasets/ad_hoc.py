@@ -105,55 +105,66 @@ def ad_hoc_data(
     class_labels = [r"A", r"B"]
 
     # Initial State
-    psi_0 = np.ones(2**n) / np.sqrt(2**n)
+    dims = 2**n
+    psi_0 = np.ones(dims) / np.sqrt(dims)
 
     # n-qubit Hadamard
     h_n = n_hadamard(n)
 
     # Single qubit Z gates
-    z_i = np.array([_i_z(i,n) for i in range(n)])
+    z_diags = np.array([np.diag(_i_z(i,n)).reshape((1,-1)) for i in range(n)])
+
+    # Precompute Pairwise ZZ block diagonals
+    zz_diags = {}
+    for (i, j) in combinations(range(n), 2):
+        zz_diags[(i, j)] = z_diags[i] * z_diags[j] 
 
     # n-qubit Z gate: notice that h_n[0,:] has the same elements as diagonal of z_n
     z_n = _n_z(h_n)
 
     # V change of basis: Eigenbasis of a random hermitian will be a random unitary
-    A = np.array(algorithm_globals.random.random((2**n, 2**n)) 
-                + 1j * algorithm_globals.random.random((2**n, 2**n)))
-
+    A = np.array(algorithm_globals.random.random((dims, )) 
+                + 1j * algorithm_globals.random.random((dims, dims)))
     Herm = A.conj().T @ A 
-    eigvals, eigvecs = np.linalg.eig(basis)
+    eigvals, eigvecs = np.linalg.eig(Herm)
     idx = eigvals.argsort()[::-1]
     V = eigvecs[:, idx]
 
     # Observable for labelling boundary
     O = V.conj().T @ z_n @ V
 
-    # 1D Stratified Sampling for x vector
-    if divisions>0: x_vecs = _modified_LHC(n, train_size+test_size, divisions)
-    else: x_vecs = _sobol_sampling(n, train_size+test_size) 
+    # Stratified Sampling for x vector
+    n_samples = train_size+test_size
+    if divisions>0: x_vecs = _modified_LHC(n, n_samples, divisions)
+    else: x_vecs = _sobol_sampling(n, n_samples) 
 
-    # ZZFeaturemap: exp(sum j phi Zi + sum j phi Zi Zj)
-    ind_pairs = list(it.combinations(range(n), 2))
+    # Seperable ZZFeaturemap: exp(sum j phi Zi + sum j phi Zi Zj)
+    ind_pairs = zz_diags.keys()
+    pre_exp = np.zeros((n_samples, dims))
 
-    _sample_total = []
+    # First Order Terms
+    for i in range(n):
+        pre_exp += _phi_i(x_vecs, i)*z_diags[i]
+    # Second Order Terms 
+    for (i,j) in ind_pairs:
+        pre_exp += _phi_ij(x_vecs, i, j)*zz_diags[(i,j)]
+    
+    # Since pre_exp is purely diagonal, exp(A) = diag(exp(Aii))
+    post_exp = np.exp(1j * pre_exp)
+    Uphi = np.zeros((10, dims, dims), dtype = post_exp.dtype)
+    cols = range(dims)
+    Uphi[:,cols, cols] = post_exp[:, cols]
 
-    for x in it.product(*[xvals] * n):
-        x_arr = np.array(x)
-        phi = np.sum(x_arr[:, None, None] * z_i, axis=0)
-        phi += sum(
-            ((np.pi - x_arr[i1]) * (np.pi - x_arr[i2]) * z_i[i1] @ z_i[i2] for i1, i2 in ind_pairs)
-        )
-        # u_u was actually scipy.linalg.expm(1j * phi), but this method is
-        # faster because phi is always a diagonal matrix.
-        # We first extract the diagonal elements, then do exponentiation, then
-        # construct a diagonal matrix from them.
-        u_u = np.diag(np.exp(1j * np.diag(phi)))
-        psi = u_u @ h_n @ u_u @ psi_0
-        exp_val = np.real(psi.conj().T @ m_m @ psi)
-        if np.abs(exp_val) > gap:
-            _sample_total.append(np.sign(exp_val))
-        else:
-            _sample_total.append(0)
+    Psi = (Uphi @ h_n @ Uphi @ psi_0).reshape((-1, dims, 1))
+
+    # Labelling
+    Psi_dag = np.transpose(Psi.conj(), (0, 2, 1))
+    exp_val = np.real(Psi_dag @ O @ Psi)
+    
+    if np.abs(exp_val) > gap:
+        _sample_total.append(np.sign(exp_val))
+    else:
+        _sample_total.append(0)
     sample_total = np.array(_sample_total).reshape(*[count] * n)
 
     # Extract training and testing samples from grid
@@ -302,9 +313,9 @@ def _modified_LHC(n:int, n_samples:int, n_div:int):
     all_bins = np.tile(np.arange(n_div),n_passes)
 
     for dim in range(n):
-        np.random.shuffle(all_bins)
+        algorithm_globals.random.shuffle(all_bins)
         chosen_bins = all_bins[:n_samples]
-        offsets = np.random.random(n_samples)
+        offsets = algorithm_globals.random.random(n_samples)
         samples[:, dim] = (chosen_bins+offsets)*bin_size
 
     return samples
@@ -313,3 +324,11 @@ def _sobol_sampling(n, n_samples):
     sampler = Sobol(d=n, scramble=True)
     p = 2*np.pi*sampler.random(n_samples)
     return p
+
+def _phi_i(x_vecs: np.ndarray, i: int):
+    return x_vecs[:,i].reshape((-1,1))
+
+def _phi_ij(x_vecs: np.ndarray, i: int, j: int):
+    return ((np.pi - x_vecs[:,i])*(np.pi - x_vecs[:,j])).reshape((-1,1))
+
+print(ad_hoc_data(10,10,3,10,0))
