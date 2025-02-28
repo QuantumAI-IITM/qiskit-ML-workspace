@@ -110,16 +110,17 @@ def ad_hoc_data(
     # n-qubit Z gate: notice that h_n[0,:] has the same elements as diagonal of z_n
     z_n = _n_z(h_n)
 
-    # Generate a random unitary operator by collecting eigenvectors of a
-    # random hermitian operator
-    basis = algorithm_globals.random.random(
-        (2**n, 2**n)
-    ) + 1j * algorithm_globals.random.random((2**n, 2**n))
-    basis = np.array(basis).conj().T @ np.array(basis)
+    # V change of basis: Eigenbasis of a random hermitian will be a random unitary
+    A = np.array(algorithm_globals.random.random((2**n, 2**n)) 
+                + 1j * algorithm_globals.random.random((2**n, 2**n)))
+
+    Herm = A.conj().T @ A 
     eigvals, eigvecs = np.linalg.eig(basis)
     idx = eigvals.argsort()[::-1]
-    eigvecs = eigvecs[:, idx]
-    m_m = eigvecs.conj().T @ d_m @ eigvecs
+    V = eigvecs[:, idx]
+
+    # Observable for labelling boundary
+    O = V.conj().T @ z_n @ V
 
     # Generate a grid of points in the feature space and compute the
     # expectation value of the parity
