@@ -23,13 +23,15 @@ import numpy as np
 from sklearn import preprocessing
 from qiskit.utils import optionals
 from ..utils import algorithm_globals
+from scipy.stats.qmc import Sobol
 
 # pylint: disable=too-many-positional-arguments
 def ad_hoc_data(
-    training_size: int,
+    train_size: int,
     test_size: int,
     n: int,
     gap: int,
+    divisions: int = 0,
     plot_data: bool = False,
     one_hot: bool = True,
     include_sample_total: bool = False,
@@ -82,8 +84,12 @@ def ad_hoc_data(
     Args:
         training_size: the number of training samples.
         test_size: the number of testing samples.
-        n: number of qubits (dimension of the feature space). Must be 2 or 3.
+        n: number of qubits (dimension of the feature space). 
         gap: separation gap (:math:`\Delta`).
+        divisions: non-zero value does 1D stratified sampling.
+            This defaults to zero which will set this to Sobol sampling.
+            It's recommended to have a total number of datapoints = 2^n
+            for Sobol sampling
         plot_data: whether to plot the data. Requires matplotlib.
         one_hot: if True, return the data in one-hot format.
         include_sample_total: if True, return all points in the uniform
@@ -122,11 +128,15 @@ def ad_hoc_data(
     # Observable for labelling boundary
     O = V.conj().T @ z_n @ V
 
-    # Generate a grid of points in the feature space and compute the
-    # expectation value of the parity
-    xvals = np.linspace(0, 2 * np.pi, count, endpoint=False)
+    # 1D Stratified Sampling for x vector
+    if divisions>0: x_vecs = _modified_LHC(n, train_size+test_size, divisions)
+    else: x_vecs = _sobol_sampling(n, train_size+test_size) 
+
+    # ZZFeaturemap: exp(sum j phi Zi + sum j phi Zi Zj)
     ind_pairs = list(it.combinations(range(n), 2))
+
     _sample_total = []
+
     for x in it.product(*[xvals] * n):
         x_arr = np.array(x)
         phi = np.sum(x_arr[:, None, None] * z_i, axis=0)
@@ -283,3 +293,23 @@ def _n_z(h_n: np.ndarray):
     res = np.sign(res)
     res = np.diag(res)
     return res
+
+def _modified_LHC(n:int, n_samples:int, n_div:int):
+    samples = np.empty((n_samples,n),dtype = float)
+    bin_size = 2*np.pi/n_div
+    n_passes = (n_samples+n_div-1)//n_div
+
+    all_bins = np.tile(np.arange(n_div),n_passes)
+
+    for dim in range(n):
+        np.random.shuffle(all_bins)
+        chosen_bins = all_bins[:n_samples]
+        offsets = np.random.random(n_samples)
+        samples[:, dim] = (chosen_bins+offsets)*bin_size
+
+    return samples
+
+def _sobol_sampling(n, n_samples):
+    sampler = Sobol(d=n, scramble=True)
+    p = 2*np.pi*sampler.random(n_samples)
+    return p
