@@ -11,20 +11,18 @@
 # that they have been altered from the originals.
 
 """
-ad hoc dataset
+
+Ad Hoc Dataset
+
 """
 from __future__ import annotations
-
 from functools import reduce
 import itertools as it
 from typing import Tuple, Dict, List
 import numpy as np
 from sklearn import preprocessing
-
 from qiskit.utils import optionals
-
 from ..utils import algorithm_globals
-
 
 # pylint: disable=too-many-positional-arguments
 def ad_hoc_data(
@@ -74,8 +72,6 @@ def ad_hoc_data(
     where :math:`\Delta` is the separation gap, and
     :math:`V\in \mathrm{SU}(4)` is a random unitary.
 
-    The current implementation only works with n = 2 or 3.
-
     **References:**
 
     [1] Havlíček V, Córcoles AD, Temme K, Harrow AW, Kandala A, Chow JM,
@@ -99,24 +95,17 @@ def ad_hoc_data(
     Raises:
         ValueError: if n is not 2 or 3.
     """
-    class_labels = [r"A", r"B"]
-    count = 0
-    if n == 2:
-        count = 100
-    elif n == 3:
-        count = 20  # coarseness of data separation
-    else:
-        raise ValueError(f"Supported values of 'n' are 2 and 3 only, but {n} is provided.")
 
-    # Define auxiliary matrices and initial state
-    z = np.diag([1, -1])
-    i_2 = np.eye(2)
-    h_2 = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
-    h_n = reduce(np.kron, [h_2] * n)
+    class_labels = [r"A", r"B"]
+
+    # Initial State
     psi_0 = np.ones(2**n) / np.sqrt(2**n)
 
-    # Generate Z matrices acting on each qubits
-    z_i = np.array([reduce(np.kron, [i_2] * i + [z] + [i_2] * (n - i - 1)) for i in range(n)])
+    # n-qubit Hadamard
+    h_n = n_hadamard(n)
+
+    # Single qubit Z gates
+    z_i = np.array([_n_z(i,n) for i in range(n)])
 
     # Construct the parity operator
     bitstrings = ["".join(bstring) for bstring in it.product(*[["0", "1"]] * n)]
@@ -268,3 +257,29 @@ def _features_and_labels_transform(
         labels = encoder.transform(np.array(raw_labels))
 
     return features, labels
+
+def _n_hadamard(n: int):
+    
+    base = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
+    result = 1
+    expo = n
+
+    while expo>0:
+        if expo%2==1:
+            result = np.kron(result, base)
+        base = np.kron(base, base)
+        expo //= 2
+
+    return result
+
+def _n_z(i: int, n: int):
+
+    z = np.diag([1, -1])
+    i_1 = np.eye(2**i)
+    i_2 = np.eye(2**(n-i-1))
+
+    result = np.kron(i_1,z)
+    result = np.kron(result, i_2)
+
+    return result
+    
