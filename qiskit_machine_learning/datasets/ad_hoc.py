@@ -105,16 +105,10 @@ def ad_hoc_data(
     h_n = n_hadamard(n)
 
     # Single qubit Z gates
-    z_i = np.array([_n_z(i,n) for i in range(n)])
+    z_i = np.array([_i_z(i,n) for i in range(n)])
 
-    # Construct the parity operator
-    bitstrings = ["".join(bstring) for bstring in it.product(*[["0", "1"]] * n)]
-    if n == 2:
-        bitstring_parity = [bstr.count("1") % 2 for bstr in bitstrings]
-        d_m = np.diag((-1) ** np.array(bitstring_parity))
-    else:  # n must be 3 here, as n checked above which allows only 2 and 3
-        bitstring_majority = [0 if bstr.count("0") > 1 else 1 for bstr in bitstrings]
-        d_m = np.diag((-1) ** np.array(bitstring_majority))
+    # n-qubit Z gate: notice that h_n[0,:] has the same elements as diagonal of z_n
+    z_n = _n_z(h_n)
 
     # Generate a random unitary operator by collecting eigenvectors of a
     # random hermitian operator
@@ -272,7 +266,7 @@ def _n_hadamard(n: int):
 
     return result
 
-def _n_z(i: int, n: int):
+def _i_z(i: int, n: int):
 
     z = np.diag([1, -1])
     i_1 = np.eye(2**i)
@@ -283,3 +277,8 @@ def _n_z(i: int, n: int):
 
     return result
     
+def _n_z(h_n: np.ndarray):
+    res = np.diag(h_n)
+    res = np.sign(res)
+    res = np.diag(res)
+    return res
