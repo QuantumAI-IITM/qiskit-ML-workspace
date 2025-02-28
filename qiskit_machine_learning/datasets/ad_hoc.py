@@ -102,8 +102,6 @@ def ad_hoc_data(
         ValueError: if n is not 2 or 3.
     """
 
-    class_labels = [r"A", r"B"]
-
     # Initial State
     dims = 2**n
     psi_0 = np.ones(dims) / np.sqrt(dims)
@@ -133,60 +131,54 @@ def ad_hoc_data(
     # Observable for labelling boundary
     O = V.conj().T @ z_n @ V
 
-    # Stratified Sampling for x vector
+    # Loop for Data Acceptance & Regeneration
     n_samples = train_size+test_size
-    if divisions>0: x_vecs = _modified_LHC(n, n_samples, divisions)
-    else: x_vecs = _sobol_sampling(n, n_samples) 
+    features, labels = np.empty((n_samples,n),dtype=float), np.empty(n_samples, dtype=int)
+    cur = 0
 
-    # Seperable ZZFeaturemap: exp(sum j phi Zi + sum j phi Zi Zj)
-    ind_pairs = zz_diags.keys()
-    pre_exp = np.zeros((n_samples, dims))
+    while n_samples > 0:
+        # Stratified Sampling for x vector
+        if divisions>0: x_vecs = _modified_LHC(n, n_samples, divisions)
+        else: x_vecs = _sobol_sampling(n, n_samples) 
 
-    # First Order Terms
-    for i in range(n):
-        pre_exp += _phi_i(x_vecs, i)*z_diags[i]
-    # Second Order Terms 
-    for (i,j) in ind_pairs:
-        pre_exp += _phi_ij(x_vecs, i, j)*zz_diags[(i,j)]
-    
-    # Since pre_exp is purely diagonal, exp(A) = diag(exp(Aii))
-    post_exp = np.exp(1j * pre_exp)
-    Uphi = np.zeros((10, dims, dims), dtype = post_exp.dtype)
-    cols = range(dims)
-    Uphi[:,cols, cols] = post_exp[:, cols]
+        # Seperable ZZFeaturemap: exp(sum j phi Zi + sum j phi Zi Zj)
+        ind_pairs = zz_diags.keys()
+        pre_exp = np.zeros((n_samples, dims))
 
-    Psi = (Uphi @ h_n @ Uphi @ psi_0).reshape((-1, dims, 1))
+        # First Order Terms
+        for i in range(n):
+            pre_exp += _phi_i(x_vecs, i)*z_diags[i]
+        # Second Order Terms 
+        for (i,j) in ind_pairs:
+            pre_exp += _phi_ij(x_vecs, i, j)*zz_diags[(i,j)]
+        
+        # Since pre_exp is purely diagonal, exp(A) = diag(exp(Aii))
+        post_exp = np.exp(1j * pre_exp)
+        Uphi = np.zeros((10, dims, dims), dtype = post_exp.dtype)
+        cols = range(dims)
+        Uphi[:,cols, cols] = post_exp[:, cols]
 
-    # Labelling
-    Psi_dag = np.transpose(Psi.conj(), (0, 2, 1))
-    exp_val = np.real(Psi_dag @ O @ Psi)
-    
-    if np.abs(exp_val) > gap:
-        _sample_total.append(np.sign(exp_val))
-    else:
-        _sample_total.append(0)
-    sample_total = np.array(_sample_total).reshape(*[count] * n)
+        Psi = (Uphi @ h_n @ Uphi @ psi_0).reshape((-1, dims, 1))
 
-    # Extract training and testing samples from grid
-    x_sample, y_sample = _sample_ad_hoc_data(sample_total, xvals, training_size + test_size, n)
+        # Labelling
+        Psi_dag = np.transpose(Psi.conj(), (0, 2, 1))
+        exp_val = np.real(Psi_dag @ O @ Psi).flatten()
+        
+        indx = np.abs(exp_val) > gap
+        count = np.count(indx)
+        features[cur:cur+count] = x_vecs[indx]
+        labels[cur:cur+count] = np.sign(exp_val[indx])
 
-    if plot_data:
-        _plot_ad_hoc_data(x_sample, y_sample, training_size)
+        n_samples -= count
+        cur += count
 
-    training_input = {
-        key: (x_sample[y_sample == k, :])[:training_size] for k, key in enumerate(class_labels)
-    }
-    test_input = {
-        key: (x_sample[y_sample == k, :])[training_size : (training_size + test_size)]
-        for k, key in enumerate(class_labels)
-    }
+    if plot_data: _plot_ad_hoc_data(features, labels, train_size)
 
-    training_feature_array, training_label_array = _features_and_labels_transform(
-        training_input, class_labels, one_hot
-    )
-    test_feature_array, test_label_array = _features_and_labels_transform(
-        test_input, class_labels, one_hot
-    )
+    training_input = {key: (features[labels == key, :])[:training_size] for key in (1,-1)}
+    test_input = {key: (features[labels == key, :])[training_size:] for key in (1,-1)}
+
+    training_feature_array, training_label_array = _labels_transform(training_input, (1,-1), one_hot)
+    test_feature_array, test_label_array = _labels_transform(test_input, (1,-1), one_hot)
 
     if include_sample_total:
         return (
@@ -194,7 +186,7 @@ def ad_hoc_data(
             training_label_array,
             test_feature_array,
             test_label_array,
-            sample_total,
+            cur,
         )
     else:
         return (
@@ -203,22 +195,6 @@ def ad_hoc_data(
             test_feature_array,
             test_label_array,
         )
-
-
-def _sample_ad_hoc_data(sample_total, xvals, num_samples, n):
-    count = sample_total.shape[0]
-    sample_a, sample_b = [], []
-    for i, sample_list in enumerate([sample_a, sample_b]):
-        label = 1 if i == 0 else -1
-        while len(sample_list) < num_samples:
-            draws = tuple(algorithm_globals.random.choice(count) for i in range(n))
-            if sample_total[draws] == label:
-                sample_list.append([xvals[d] for d in draws])
-
-    labels = np.array([0] * num_samples + [1] * num_samples)
-    samples = [sample_a, sample_b]
-    samples = np.reshape(samples, (2 * num_samples, n))
-    return samples, labels
 
 
 @optionals.HAS_MATPLOTLIB.require_in_call
@@ -235,7 +211,7 @@ def _plot_ad_hoc_data(x_total, y_total, training_size):
     plt.show()
 
 
-def _features_and_labels_transform(
+def _labels_transform(
     dataset: Dict[str, np.ndarray], class_labels: List[str], one_hot: bool = True
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
