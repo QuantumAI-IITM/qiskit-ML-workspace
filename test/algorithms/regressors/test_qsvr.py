@@ -18,6 +18,7 @@ import unittest
 from test import QiskitMachineLearningTestCase
 
 import numpy as np
+from sklearn.metrics import mean_squared_error
 
 from qiskit.circuit.library import ZZFeatureMap
 from qiskit_machine_learning.utils import algorithm_globals
@@ -36,18 +37,24 @@ class TestQSVR(QiskitMachineLearningTestCase):
 
         self.feature_map = ZZFeatureMap(feature_dimension=2, reps=2)
 
-        self.sample_train = np.asarray(
-            [
-                [3.07876080, 1.75929189],
-                [6.03185789, 5.27787566],
-                [6.22035345, 2.70176968],
-                [0.18849556, 2.82743339],
-            ]
-        )
-        self.label_train = np.asarray([0, 0, 1, 1])
+        num_samples_train = 10
+        num_samples_test = 4
+        eps = 0.2
+        lb, ub = -np.pi, np.pi
+        X_ = np.linspace(lb, ub, num=50).reshape(50, 1)
+        f = lambda x: np.sin(x)
 
-        self.sample_test = np.asarray([[2.199114860, 5.15221195], [0.50265482, 0.06283185]])
-        self.label_test = np.asarray([0, 1])
+        X_train = (ub - lb) * algorithm_globals.random.random([num_samples_train, 1]) + lb
+        y_train = f(X_train[:, 0]) + eps * (2 * algorithm_globals.random.random(num_samples_train) - 1)
+        
+        X_test = (ub - lb) * algorithm_globals.random.random([num_samples_test, 1]) + lb
+        y_test = f(X_test[:, 0]) + eps * (2 * algorithm_globals.random.random(num_samples_test) - 1)
+
+        self.sample_train = X_train
+        self.label_train = y_train
+
+        self.sample_test = X_test
+        self.label_test = y_test
 
     def test_qsvr(self):
         """Test QSVR"""
@@ -55,9 +62,12 @@ class TestQSVR(QiskitMachineLearningTestCase):
 
         qsvr = QSVR(quantum_kernel=qkernel)
         qsvr.fit(self.sample_train, self.label_train)
-        score = qsvr.score(self.sample_test, self.label_test)
-
-        self.assertAlmostEqual(score, 0.38359, places=4)
+        # score = qsvr.score(self.sample_test, self.label_test)
+        # self.assertAlmostEqual(score, 0.38359, places=4)
+        
+        predictions = qsvr.predict(self.sample_test)
+        score = mean_squared_error(self.label_test, predictions)
+        self.assertLess(mse, 0.05)
 
     def test_change_kernel(self):
         """Test QSVR with QuantumKernel later"""
@@ -66,10 +76,13 @@ class TestQSVR(QiskitMachineLearningTestCase):
         qsvr = QSVR()
         qsvr.quantum_kernel = qkernel
         qsvr.fit(self.sample_train, self.label_train)
-        score = qsvr.score(self.sample_test, self.label_test)
+        # score = qsvr.score(self.sample_test, self.label_test)
 
-        self.assertAlmostEqual(score, 0.38359, places=4)
-
+        # self.assertAlmostEqual(score, 0.38359, places=4)
+        predictions = qsvr.predict(self.sample_test)
+        score = mean_squared_error(self.label_test, predictions)
+        self.assertLess(mse, 0.05)
+        
     def test_qsvr_parameters(self):
         """Test QSVR with extra constructor parameters"""
 
@@ -77,9 +90,12 @@ class TestQSVR(QiskitMachineLearningTestCase):
 
         qsvr = QSVR(quantum_kernel=qkernel, tol=1e-4, C=0.5)
         qsvr.fit(self.sample_train, self.label_train)
-        score = qsvr.score(self.sample_test, self.label_test)
+        # score = qsvr.score(self.sample_test, self.label_test)
 
-        self.assertAlmostEqual(score, 0.38365, places=4)
+        # self.assertAlmostEqual(score, 0.38365, places=4)
+        predictions = qsvr.predict(self.sample_test)
+        score = mean_squared_error(self.label_test, predictions)
+        self.assertLess(mse, 0.05)
 
     def test_qsvc_to_string(self):
         """Test QSVR print works when no *args passed in"""
