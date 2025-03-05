@@ -67,7 +67,7 @@ class TestQSVR(QiskitMachineLearningTestCase):
         
         predictions = qsvr.predict(self.sample_test)
         score = mean_squared_error(self.label_test, predictions)
-        self.assertLess(mse, 0.05)
+        self.assertLess(score, 0.05)
 
     def test_change_kernel(self):
         """Test QSVR with QuantumKernel later"""
@@ -81,7 +81,7 @@ class TestQSVR(QiskitMachineLearningTestCase):
         # self.assertAlmostEqual(score, 0.38359, places=4)
         predictions = qsvr.predict(self.sample_test)
         score = mean_squared_error(self.label_test, predictions)
-        self.assertLess(mse, 0.05)
+        self.assertLess(score, 0.05)
         
     def test_qsvr_parameters(self):
         """Test QSVR with extra constructor parameters"""
@@ -95,7 +95,7 @@ class TestQSVR(QiskitMachineLearningTestCase):
         # self.assertAlmostEqual(score, 0.38365, places=4)
         predictions = qsvr.predict(self.sample_test)
         score = mean_squared_error(self.label_test, predictions)
-        self.assertLess(mse, 0.05)
+        self.assertLess(score, 0.05)
 
     def test_qsvc_to_string(self):
         """Test QSVR print works when no *args passed in"""
