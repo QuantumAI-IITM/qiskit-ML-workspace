@@ -18,13 +18,15 @@ import unittest
 from test import QiskitMachineLearningTestCase
 
 import numpy as np
-from qiskit.circuit.library import ZZFeatureMap
-from qiskit.primitives import Sampler
-from qiskit_machine_learning.utils import algorithm_globals
+from sklearn.metrics import mean_squared_error
 
+from qiskit.circuit.library import ZZFeatureMap
+from qiskit_machine_learning.utils import algorithm_globals
 from qiskit_machine_learning.algorithms import QSVR, SerializableModelMixin
 from qiskit_machine_learning.exceptions import QiskitMachineLearningWarning
 from qiskit_machine_learning.kernels import FidelityQuantumKernel
+
+from qiskit.primitives import Sampler
 
 
 class TestQSVR(QiskitMachineLearningTestCase):
@@ -38,18 +40,38 @@ class TestQSVR(QiskitMachineLearningTestCase):
         self.sampler = Sampler()
         self.feature_map = ZZFeatureMap(feature_dimension=2, reps=2)
 
-        self.sample_train = np.asarray(
+        X_train = np.asarray(
             [
-                [3.07876080, 1.75929189],
-                [6.03185789, 5.27787566],
-                [6.22035345, 2.70176968],
-                [0.18849556, 2.82743339],
+                [ 0.6244405 ],
+                [ 2.35344271],
+                [-1.90735725],
+                [-1.19177151],
+                [ 1.742986  ],
+                [ 2.96457287],
+                [ 0.00465701],
+                [-2.23745798],
+                [-3.05402838],
+                [-1.69862126]
             ]
         )
-        self.label_train = np.asarray([0, 0, 1, 1])
+        y_train = np.asarray([ 0.43737233,  0.78011337, -1.09516297, -0.92649394,  1.06291692,
+        0.20854336, -0.11543275, -0.66424055, -0.00128957, -0.89624791])
 
-        self.sample_test = np.asarray([[2.199114860, 5.15221195], [0.50265482, 0.06283185]])
-        self.label_test = np.asarray([0, 1])
+        X_test = np.asarray(
+            [
+                [-2.31813251],
+                [-2.36402457],
+                [ 2.68645474],
+                [-0.64353519]
+            ]
+        )
+        y_test = np.asarray([-0.73350203, -0.70154846,  0.43958619, -0.60002726])
+
+        self.sample_train = X_train
+        self.label_train = y_train
+
+        self.sample_test = X_test
+        self.label_test = y_test
 
     def test_qsvr(self):
         """Test QSVR"""
@@ -57,9 +79,12 @@ class TestQSVR(QiskitMachineLearningTestCase):
 
         qsvr = QSVR(quantum_kernel=qkernel)
         qsvr.fit(self.sample_train, self.label_train)
-        score = qsvr.score(self.sample_test, self.label_test)
+        # score = qsvr.score(self.sample_test, self.label_test)
 
-        self.assertAlmostEqual(score, 0.38, places=2)
+        # self.assertAlmostEqual(score, 0.38, places=2)
+        predictions = qsvr.predict(self.sample_test)
+        score = mean_squared_error(self.label_test, predictions)
+        self.assertAlmostEqual(score, 0.010954762059417835, places = 4)
 
     def test_change_kernel(self):
         """Test QSVR with QuantumKernel later"""
@@ -68,9 +93,12 @@ class TestQSVR(QiskitMachineLearningTestCase):
         qsvr = QSVR()
         qsvr.quantum_kernel = qkernel
         qsvr.fit(self.sample_train, self.label_train)
-        score = qsvr.score(self.sample_test, self.label_test)
+        # score = qsvr.score(self.sample_test, self.label_test)
 
-        self.assertAlmostEqual(score, 0.38, places=2)
+        # self.assertAlmostEqual(score, 0.38, places=2)
+        predictions = qsvr.predict(self.sample_test)
+        score = mean_squared_error(self.label_test, predictions)
+        self.assertAlmostEqual(score, 0.010954762059417835, places = 4)
 
     def test_qsvr_parameters(self):
         """Test QSVR with extra constructor parameters"""
@@ -78,9 +106,12 @@ class TestQSVR(QiskitMachineLearningTestCase):
 
         qsvr = QSVR(quantum_kernel=qkernel, tol=1e-4, C=0.5)
         qsvr.fit(self.sample_train, self.label_train)
-        score = qsvr.score(self.sample_test, self.label_test)
+        # score = qsvr.score(self.sample_test, self.label_test)
 
-        self.assertAlmostEqual(score, 0.38, places=2)
+        # self.assertAlmostEqual(score, 0.38, places=2)
+        predictions = qsvr.predict(self.sample_test)
+        score = mean_squared_error(self.label_test, predictions)
+        self.assertAlmostEqual(score, 0.010954762059417835, places = 4)
 
     def test_qsvc_to_string(self):
         """Test QSVR print works when no *args passed in"""
