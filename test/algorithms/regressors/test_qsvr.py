@@ -75,7 +75,7 @@ class TestQSVR(QiskitMachineLearningTestCase):
                 [-0.64353519]
             ]
         )
-        y_test = np.asarray([-0.81312255, -0.70611484,  0.50473188, -0.41777796])
+        y_test = np.asarray([-0.73350203, -0.70154846,  0.43958619, -0.60002726])
 
         self.sample_train = X_train
         self.label_train = y_train
