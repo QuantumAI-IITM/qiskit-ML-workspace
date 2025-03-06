@@ -37,18 +37,45 @@ class TestQSVR(QiskitMachineLearningTestCase):
 
         self.feature_map = ZZFeatureMap(feature_dimension=2, reps=2)
 
-        num_samples_train = 10
-        num_samples_test = 4
-        eps = 0.2
-        lb, ub = -np.pi, np.pi
-        X_ = np.linspace(lb, ub, num=50).reshape(50, 1)
-        f = lambda x: np.sin(x)
+        # num_samples_train = 10
+        # num_samples_test = 4
+        # eps = 0.2
+        # lb, ub = -np.pi, np.pi
+        # X_ = np.linspace(lb, ub, num=50).reshape(50, 1)
+        # f = lambda x: np.sin(x)
 
-        X_train = (ub - lb) * algorithm_globals.random.random([num_samples_train, 1]) + lb
-        y_train = f(X_train[:, 0]) + eps * (2 * algorithm_globals.random.random(num_samples_train) - 1)
+        # X_train = (ub - lb) * algorithm_globals.random.random([num_samples_train, 1]) + lb
+        # y_train = f(X_train[:, 0]) + eps * (2 * algorithm_globals.random.random(num_samples_train) - 1)
+
+        X_train = np.asarray(
+            [
+                [ 0.6244405 ],
+                [ 2.35344271],
+                [-1.90735725],
+                [-1.19177151],
+                [ 1.742986  ],
+                [ 2.96457287],
+                [ 0.00465701],
+                [-2.23745798],
+                [-3.05402838],
+                [-1.69862126]
+            ]
+        )
+        y_train = np.asarray([ 0.43737233,  0.78011337, -1.09516297, -0.92649394,  1.06291692,
+        0.20854336, -0.11543275, -0.66424055, -0.00128957, -0.89624791])
         
-        X_test = (ub - lb) * algorithm_globals.random.random([num_samples_test, 1]) + lb
-        y_test = f(X_test[:, 0]) + eps * (2 * algorithm_globals.random.random(num_samples_test) - 1)
+        # X_test = (ub - lb) * algorithm_globals.random.random([num_samples_test, 1]) + lb
+        # y_test = f(X_test[:, 0]) + eps * (2 * algorithm_globals.random.random(num_samples_test) - 1)
+
+        X_test = np.asarray(
+            [
+                [-2.31813251],
+                [-2.36402457],
+                [ 2.68645474],
+                [-0.64353519]
+            ]
+        )
+        y_test = np.asarray([-0.81312255, -0.70611484,  0.50473188, -0.41777796])
 
         self.sample_train = X_train
         self.label_train = y_train
@@ -67,7 +94,7 @@ class TestQSVR(QiskitMachineLearningTestCase):
         
         predictions = qsvr.predict(self.sample_test)
         score = mean_squared_error(self.label_test, predictions)
-        self.assertLess(score, 0.05)
+        self.assertAlmostEqual(score, 0.010954762059417835, places = 4)
 
     def test_change_kernel(self):
         """Test QSVR with QuantumKernel later"""
@@ -81,7 +108,7 @@ class TestQSVR(QiskitMachineLearningTestCase):
         # self.assertAlmostEqual(score, 0.38359, places=4)
         predictions = qsvr.predict(self.sample_test)
         score = mean_squared_error(self.label_test, predictions)
-        self.assertLess(score, 0.05)
+        self.assertAlmostEqual(score, 0.010954762059417835, places = 4)
         
     def test_qsvr_parameters(self):
         """Test QSVR with extra constructor parameters"""
@@ -95,7 +122,7 @@ class TestQSVR(QiskitMachineLearningTestCase):
         # self.assertAlmostEqual(score, 0.38365, places=4)
         predictions = qsvr.predict(self.sample_test)
         score = mean_squared_error(self.label_test, predictions)
-        self.assertLess(score, 0.05)
+        self.assertAlmostEqual(score, 0.010954762059417835, places = 4)
 
     def test_qsvc_to_string(self):
         """Test QSVR print works when no *args passed in"""
