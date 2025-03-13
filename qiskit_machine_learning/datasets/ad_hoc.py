@@ -27,6 +27,7 @@ from qiskit.utils import optionals
 
 from ..utils import algorithm_globals
 
+
 # pylint: disable=too-many-positional-arguments
 def ad_hoc_data(
     training_size: int,
@@ -176,10 +177,10 @@ def ad_hoc_data(
         )
         plot_data = False
 
-    if sampling_method=="grid" and (training_size+test_size)>4000:
+    if sampling_method == "grid" and (training_size + test_size) > 4000:
         warnings.warn(
             "Grid Sampling for large number of samples is not recommended.",
-            UserWarning
+            UserWarning,
         )
 
     # Initial State
@@ -232,8 +233,16 @@ def ad_hoc_data(
             samp_fn = lambda a, b: _sobol_sampling(a, b)
 
         a_features, b_features = _loop_sampling(
-            n, n_samples, z_diags, zz_diags, O, psi_0, h_n, 
-            lab_fn, samp_fn, sampling_method
+            n,
+            n_samples,
+            z_diags,
+            zz_diags,
+            O,
+            psi_0,
+            h_n,
+            lab_fn,
+            samp_fn,
+            sampling_method,
         )
 
     if plot_data:
@@ -244,9 +253,15 @@ def ad_hoc_data(
     res[0] = np.concatenate(
         (a_features[:training_size], b_features[:training_size]), axis=0
     )
-    res[1] = np.array([[class_labels[0]] * training_size + [class_labels[1]] * training_size])
-    res[2] = np.concatenate((a_features[training_size:], b_features[training_size:]), axis=0)
-    res[3] = np.array([[class_labels[0]] * test_size + [class_labels[1]] * test_size])
+    res[1] = np.array(
+        [[class_labels[0]] * training_size + [class_labels[1]] * training_size]
+    )
+    res[2] = np.concatenate(
+        (a_features[training_size:], b_features[training_size:]), axis=0
+    )
+    res[3] = np.array(
+        [[class_labels[0]] * test_size + [class_labels[1]] * test_size]
+    )
 
     if one_hot:
         res[1] = _onehot_labels(res[1])
@@ -260,20 +275,21 @@ def ad_hoc_data(
 
 @optionals.HAS_MATPLOTLIB.require_in_call
 def _plot_ad_hoc_data(
-    a_features: np.ndarray, b_features: np.ndarray, training_size: int
+    a_features: np.ndarray,
+    b_features: np.ndarray,
+    training_size: int
 ) -> None:
     """Plot the ad hoc dataset.
 
     Args:
-        x_total (np.ndarray): The dataset features.
-        y_total (np.ndarray): The dataset labels.
+        a_features (np.ndarray): Class-A feature vectors.
+        b_features (np.ndarray): Class-B feature vectors.
         training_size (int): Number of training samples to plot.
     """
     import matplotlib.pyplot as plt
 
-    n = x_total.shape[1]
     fig = plt.figure()
-    projection = "3d" if n == 3 else None
+    projection = "3d" if a_features.shape[1] == 3 else None
     ax1 = fig.add_subplot(1, 1, 1, projection=projection)
     ax1.scatter(*a_features[:training_size].T)
     ax1.scatter(*b_features[:training_size].T)
@@ -435,7 +451,16 @@ def _random_unitary(dims):
 
 
 def _loop_sampling(
-    n, n_samples, z_diags, zz_diags, O, psi_0, h_n, lab_fn, samp_fn, sampling_method
+    n,
+    n_samples,
+    z_diags,
+    zz_diags,
+    O,
+    psi_0,
+    h_n,
+    lab_fn,
+    samp_fn,
+    sampling_method
 ):
     """
     Loop-based sampling routine to allocate feature vectors into two classes.
@@ -448,8 +473,11 @@ def _loop_sampling(
         O (np.ndarray): Observable for label determination.
         psi_0 (np.ndarray): Initial state vector.
         h_n (np.ndarray): n-qubit Hadamard matrix.
-        lab_fn (Callable): Labeling function (either expectation-based or measurement-based).
+        lab_fn (Callable): Labeling function (either expectation-based or
+            measurement-based).
         samp_fn (Callable): Sampling function that generates feature vectors.
+        sampling_method (str): String indicating which sampling method is used
+            ("grid", "hypercube", or "sobol").
 
     Returns:
         Tuple[np.ndarray, np.ndarray]:
@@ -467,7 +495,7 @@ def _loop_sampling(
         n_pass = a_needed + b_needed
 
         # Sobol works better with a 2^n just above n_pass
-        if sampling_method=="sobol": 
+        if sampling_method == "sobol":
             n_pass = 2 ** ((n_pass - 1).bit_length())
 
         # Stratified Sampling for x vector
@@ -478,6 +506,7 @@ def _loop_sampling(
         # First Order Terms
         for i in range(n):
             pre_exp += _phi_i(x_vecs, i) * z_diags[i]
+
         # Second Order Terms
         for (i, j) in zz_diags.keys():
             pre_exp += _phi_ij(x_vecs, i, j) * zz_diags[(i, j)]
@@ -492,22 +521,23 @@ def _loop_sampling(
 
         # Labelling
         raw_labels = lab_fn(Psi)
-        
-        if a_needed>0:
+
+        if a_needed > 0:
             a_indx = (raw_labels == 1)
             a_count = min(int(np.sum(a_indx)), a_needed)
-            a_features[a_cur:a_cur+a_count] = x_vecs[a_indx][:a_count]
-            a_cur+=a_count
-            a_needed-=a_count
+            a_features[a_cur : a_cur + a_count] = x_vecs[a_indx][:a_count]
+            a_cur += a_count
+            a_needed -= a_count
 
-        if b_needed>0:
-            b_indx = (raw_labels==-1)
+        if b_needed > 0:
+            b_indx = (raw_labels == -1)
             b_count = min(int(np.sum(b_indx)), b_needed)
-            b_features[b_cur:b_cur+b_count] = x_vecs[b_indx][:b_count]
-            b_cur+=b_count
-            b_needed-=b_count
+            b_features[b_cur : b_cur + b_count] = x_vecs[b_indx][:b_count]
+            b_cur += b_count
+            b_needed -= b_count
 
     return a_features, b_features
+
 
 def _exp_label(Psi, gap, O):
     """
@@ -529,13 +559,14 @@ def _exp_label(Psi, gap, O):
     labels = (np.abs(exp_val) > gap) * (np.sign(exp_val))
     return labels
 
+
 def _measure(Psi, O):
     """
     Compute labels by simulating a measurement of the observable on each state.
 
     The eigen-decomposition of O is used as the measurement basis. Each state
-    is projected onto one of the eigenvectors, and labels are set to the corresponding
-    eigenvalue.
+    is projected onto one of the eigenvectors, and labels are set to the
+    corresponding eigenvalue.
 
     Args:
         Psi (np.ndarray): Array of shape `(num_samples, dim, 1)` containing
@@ -557,9 +588,8 @@ def _measure(Psi, O):
 
     return labels
 
-def _grid_sampling(
-    n, n_samples, z_diags, zz_diags, O, psi_0, h_n, lab_fn
-):
+
+def _grid_sampling(n, n_samples, z_diags, zz_diags, O, psi_0, h_n, lab_fn):
     """
     Generate feature vectors from a uniform grid (only supported for `n <= 3`)
     and assign labels using the specified labeling function.
@@ -572,16 +602,16 @@ def _grid_sampling(
         O (np.ndarray): Observable for label determination.
         psi_0 (np.ndarray): Initial state vector.
         h_n (np.ndarray): n-qubit Hadamard matrix.
-        lab_fn (Callable): Labeling function (either expectation-based or measurement-based).
+        lab_fn (Callable): Labeling function (either expectation-based or
+            measurement-based).
 
     Returns:
         Tuple[np.ndarray, np.ndarray]:
             Two arrays of shape `(n_samples, n)`, each containing the sampled
-            feature vectors belonging to class A and class B, respectively. This
-            code is incomplete and references variables not defined above, so
-            the returned arrays are empty placeholders by default.
+            feature vectors belonging to class A and class B, respectively.
+            This code is incomplete and references variables not defined above,
+            so the returned arrays are empty placeholders by default.
     """
-
     if n == 1:
         count = 1000
     elif n == 2:
@@ -602,24 +632,23 @@ def _grid_sampling(
             pre_exp += ((np.pi - x_arr[i]) * (np.pi - x_arr[j])) * zz_diags[(i, j)]
 
         Uphi = np.diag(np.exp(1j * pre_exp.flatten()))
-
         psi = Uphi @ h_n @ Uphi @ psi_0
-        label = lab_fn(psi.reshape((1,-1, 1)))
+        label = lab_fn(psi.reshape((1, -1, 1)))
 
         grid_labels.append(label)
 
-    grid_labels = np.array(grid_labels).reshape(*[count] * n)       
+    grid_labels = np.array(grid_labels).reshape(*[count] * n)
 
     count = grid_labels.shape[0]
     a_features, b_features = [], []
-    
+
     while len(a_features) < n_samples:
-        draws = tuple(algorithm_globals.random.choice(count) for i in range(n))
+        draws = tuple(algorithm_globals.random.choice(count) for _ in range(n))
         if grid_labels[draws] == 1:
             a_features.append([xvals[d] for d in draws])
 
     while len(b_features) < n_samples:
-        draws = tuple(algorithm_globals.random.choice(count) for i in range(n))
+        draws = tuple(algorithm_globals.random.choice(count) for _ in range(n))
         if grid_labels[draws] == -1:
             b_features.append([xvals[d] for d in draws])
 
