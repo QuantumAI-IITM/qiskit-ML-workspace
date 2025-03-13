@@ -24,38 +24,43 @@ from sklearn import preprocessing
 from qiskit.utils import optionals
 from ..utils import algorithm_globals
 from scipy.stats.qmc import Sobol
+import warnings
 
 # pylint: disable=too-many-positional-arguments
 def ad_hoc_data(
     training_size: int,
     test_size: int,
     n: int,
-    gap: int,
+    gap: int = 0,
     plot_data: bool = False,
     one_hot: bool = True,
     include_sample_total: bool = False,
-    divisions: int = 0
+    entanglement: str = "full",
+    sampling_method: str = "grid",
+    divisions: int = 0,
+    labelling_method: str = "expectation",
+    reps: int = 1
 ) -> (
     Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
     | Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
 ):
-    r"""Generates a toy dataset that can be fully separated with
+    r"""
+    Generates a dataset that can be fully separated with
     :class:`~qiskit.circuit.library.ZZFeatureMap` according to the procedure
-    outlined in [1]. To construct the dataset, we first sample uniformly
-    distributed vectors :math:`\vec{x} \in (0, 2\pi]^{n}` and apply the
-    feature map
+    outlined in [1]. 
+
+    To construct the dataset, we first sample uniformly distributed vectors 
+    :math:`\vec{x} \in (0, 2\pi]^{n}` and apply the feature map:
 
     .. math::
-        |\Phi(\vec{x})\rangle = U_{{\Phi} (\vec{x})} H^{\otimes n} U_{{\Phi} (\vec{x})}
-        H^{\otimes n} |0^{\otimes n} \rangle
+        |\Phi(\vec{x})\rangle = U_{{\Phi} (\vec{x})} H^{\otimes n} 
+        U_{{\Phi} (\vec{x})} H^{\otimes n} |0^{\otimes n} \rangle
 
-    where
+    where:
 
     .. math::
-        U_{{\Phi} (\vec{x})} = \exp \left( i \sum_{S \subseteq [n] } \phi_S(\vec{x})
-        \prod_{i \in S} Z_i \right)
-
-    and
+        U_{{\Phi} (\vec{x})} = \exp \left( i \sum_{S \subseteq [n] } 
+        \phi_S(\vec{x}) \prod_{i \in S} Z_i \right)
 
     .. math::
         \begin{cases}
@@ -63,7 +68,18 @@ def ad_hoc_data(
         \phi_{\{i\}} = x_i
         \end{cases}
 
-    We then attribute labels to the vectors according to the rule
+    The second-order terms included in the above summation are decided by the 
+    entanglement configuration passed as an argument to the function. 
+    (See Args for more information). 
+
+    We then attribute labels to the vectors according to the observable O below:
+
+    .. math::
+        O = V^\dagger \prod_i Z_i V
+
+    Following this, the labelling method passed as an argument determines whether
+    the label is based on a simple measurement done on the resulting quantum state
+    or based on expectation as shown below:
 
     .. math::
         m(\vec{x}) = \begin{cases}
@@ -72,7 +88,10 @@ def ad_hoc_data(
         \end{cases}
 
     where :math:`\Delta` is the separation gap, and
-    :math:`V\in \mathrm{SU}(4)` is a random unitary.
+    :math:`V` is a random unitary matrix.
+
+    The method used for the uniform sampling of :math:`\vec{x}` is decided by the 
+    sampling method argument given. (See Args for more information)
 
     **References:**
 
@@ -85,27 +104,54 @@ def ad_hoc_data(
         training_size (int): Number of training samples.
         test_size (int): Number of testing samples.
         n (int): Number of qubits (dimension of the feature space).
-        gap (int): Separation gap (Δ).
-        plot_data (bool, optional): Whether to plot the data. Disabled if n > 3.
-        one_hot (bool, optional): If True, return labels in one-hot format.
-        include_sample_total (bool, optional): If True, return the total number
+        gap (int, optional): If `labelling_method="expectation"`, this defines the separation gap (Δ).
+        plot_data (bool, optional): Whether to plot the data. Disabled if `n > 3`.
+        one_hot (bool, optional): If `True`, returns labels in one-hot format.
+        include_sample_total (bool, optional): If `True`, returns the total number
             of accepted samples along with training and testing samples.
-        divisions (int, optional): For 1D stratified sampling. If zero, Sobol
-            sampling is used. It is recommended that the total number of datapoints
-            equals 2^n for Sobol sampling.
+        entanglement (str, optional): 
+            - `"linear"`: Includes all terms of the form :math:`Z_{i}Z_{i+1}`.
+            - `"circular"`: Includes `linear` terms and additionally :math:`Z_{n-1}Z_{0}`.
+            - `"full"`: Includes all possible pairs :math:`Z_iZ_j`.
+        sampling_method (str, optional): 
+            - `"grid"`: Generates a uniform grid and selects :math:`\vec{x}` from the grid.
+              (Only supported for `n <= 3`).
+            - `"hypercube"`: Uses a variant of the Latin hypercube to generate 1D stratified samples.
+            - `"sobol"`: Uses Sobol sequences to generate uniformly distributed samples.
+        divisions (int, optional): If the `"hypercube"` method is used for sampling, `divisions` 
+            must be defined. This determines the number of divisions each 1D stratification makes.
+            Recommended to set this close to `training_size`.
+        labelling_method (str, optional): Determines how labels are assigned.
+            - `"expectation"`: Labels the datapoints based on the expectation value discussed above.
+            - `"measurement"`: Labels the datapoints based on a simple measurement performed on the states.
+        reps (int, optional): If `"measurement"` is used as the `labelling_method`, setting `reps > 1` 
+            will result in repeated measurements of the same datapoint in the final dataset. The resulting
+            dataset will be of sizes reps*training_size and reps*test_size
 
     Returns:
         Tuple: A tuple containing:
-            - Training features (np.ndarray)
-            - Training labels (np.ndarray)
-            - Testing features (np.ndarray)
-            - Testing labels (np.ndarray)
-            - (Optional) Total accepted samples (int), if
-              include_sample_total is True.
-
+            - Training features (`np.ndarray`)
+            - Training labels (`np.ndarray`)
+            - Testing features (`np.ndarray`)
+            - Testing labels (`np.ndarray`)
+            - (Optional) Total accepted samples (`int`), if `include_sample_total` is True.
     """
 
-    if n>3: plot_data = False
+    # Errors
+    if training_size < 0: raise ValueError("Training size can't be less than 0")
+    if test_size < 0: raise ValueError("Test size can't be less than 0")
+    if n < 0: raise ValueError("Number of qubits can't be less than 0")
+    if gap < 0 and labelling_method == "expectation": raise ValueError("Gap can't be less than 0")
+    if entanglement not in {"linear", "circular", "full"}: raise ValueError("Invalid entanglement type. Must be 'linear', 'circular', or 'full'.")
+    if sampling_method not in {"grid", "hypercube", "sobol"}: raise ValueError("Invalid sampling method. Must be 'grid', 'hypercube', or 'sobol'.")
+    if divisions == 0 and sampling_method == "hypercube": raise ValueError("Divisions must be set for 'hypercube' sampling.")
+    if labelling_method not in {"expectation", "measurement"}: raise ValueError("Invalid labelling method. Must be 'expectation' or 'measurement'.")
+    if n > 3 and sampling_method == "grid": raise ValueError("Grid sampling is unsupported for n > 3.")
+
+    # Warnings
+    if n > 3 and plot_data:
+        warnings.warn("Plotting for n > 3 is unsupported. Disabling plot_data.", UserWarning)
+        plot_data = False
 
     # Initial State
     dims = 2**n
@@ -117,66 +163,44 @@ def ad_hoc_data(
     # Single qubit Z gates
     z_diags = np.array([np.diag(_i_z(i,n)).reshape((1,-1)) for i in range(n)])
 
-    # Precompute Pairwise ZZ block diagonals
+    # Precompute ZZ Entanglements
     zz_diags = {}
-    for (i, j) in it.combinations(range(n), 2):
-        zz_diags[(i, j)] = z_diags[i] * z_diags[j] 
+    if entanglement=="full":
+        for (i, j) in it.combinations(range(n), 2):
+            zz_diags[(i, j)] = z_diags[i] * z_diags[j] 
+    else:
+        for i in range(n-1):
+            zz_diags[(i,i+1)] = z_diags[i] * z_diags[i+1]
+        if entanglement=="circular":
+            zz_diags[(n-1,0)] = z_diags[n-1] * z_diags[0]
 
     # n-qubit Z gate: notice that h_n[0,:] has the same elements as diagonal of z_n
     z_n = _n_z(h_n)
 
     # V change of basis: Eigenbasis of a random hermitian will be a random unitary
-    A = np.array(algorithm_globals.random.random((dims, dims)) 
-                + 1j * algorithm_globals.random.random((dims, dims)))
-    Herm = A.conj().T @ A 
-    eigvals, eigvecs = np.linalg.eig(Herm)
-    idx = eigvals.argsort()[::-1]
-    V = eigvecs[:, idx]
+    V = _random_unitary(dims)
 
     # Observable for labelling boundary
     O = V.conj().T @ z_n @ V
 
-    # Loop for Data Acceptance & Regeneration
     n_samples = training_size+test_size
-    features = np.empty((n_samples, n), dtype=float)
-    labels = np.empty(n_samples, dtype=int)
-    cur = 0
 
-    while n_samples > 0:
-        # Stratified Sampling for x vector
-        if divisions>0: x_vecs = _modified_LHC(n, n_samples, divisions)
-        else: x_vecs = _sobol_sampling(n, n_samples) 
+    # Labelling Methods
+    if labelling_method=="expectation":
+        lab_fn = lambda x: _exp_label(x,gap)
+    else:
+        lab_fn = lamdba x: _measure(x)
 
-        # Seperable ZZFeaturemap: exp(sum j phi Zi + sum j phi Zi Zj)
-        ind_pairs = zz_diags.keys()
-        pre_exp = np.zeros((n_samples, dims))
+    # Sampling Methods
+    if sampling_method == "grid":
+        features, labels = _grid_sampling(n, n_samples, z_diags, zz_diags, O, h_n, lab_fn)
+    else:
+        if sampling_method == "hypercube":
+            samp_fn = lambda a,b: _modified_LHC(a,b,divisions)
+        else:
+            samp_fn = lambda a,b: _sobol_sampling(a,b)
 
-        # First Order Terms
-        for i in range(n):
-            pre_exp += _phi_i(x_vecs, i)*z_diags[i]
-        # Second Order Terms 
-        for (i,j) in ind_pairs:
-            pre_exp += _phi_ij(x_vecs, i, j)*zz_diags[(i,j)]
-        
-        # Since pre_exp is purely diagonal, exp(A) = diag(exp(Aii))
-        post_exp = np.exp(1j * pre_exp)
-        Uphi = np.zeros((n_samples, dims, dims), dtype = post_exp.dtype)
-        cols = range(dims)
-        Uphi[:,cols, cols] = post_exp[:, cols]
-
-        Psi = (Uphi @ h_n @ Uphi @ psi_0).reshape((-1, dims, 1))
-
-        # Labelling
-        Psi_dag = np.transpose(Psi.conj(), (0, 2, 1))
-        exp_val = np.real(Psi_dag @ O @ Psi).flatten()
-        
-        indx = np.abs(exp_val) > gap
-        count = np.sum(indx)
-        features[cur:cur+count] = x_vecs[indx]
-        labels[cur:cur+count] = np.sign(exp_val[indx])
-
-        n_samples -= count
-        cur += count
+        features, labels = _loop_sampling(n, n_samples, z_diags, zz_diags, O, h_n, lab_fn, samp_fn)
 
     if plot_data: _plot_ad_hoc_data(features, labels, training_size)
 
@@ -215,7 +239,6 @@ def _plot_ad_hoc_data(x_total: np.ndarray, y_total: np.ndarray, training_size: i
     ax1.set_title("Ad-hoc Data")
     plt.show()
 
-
 def _onehot_labels(labels: np.ndarray) -> np.ndarray:
     """Convert labels to one-hot encoded format.
 
@@ -230,7 +253,6 @@ def _onehot_labels(labels: np.ndarray) -> np.ndarray:
     encoder = OneHotEncoder(sparse_output=False)
     labels_one_hot = encoder.fit_transform(labels.reshape(-1, 1))
     return labels_one_hot
-
 
 def _n_hadamard(n: int) -> np.ndarray:
     """Generate an n-qubit Hadamard matrix.
@@ -253,7 +275,6 @@ def _n_hadamard(n: int) -> np.ndarray:
 
     return result
 
-
 def _i_z(i: int, n: int) -> np.ndarray:
     """Create the i-th single-qubit Z gate in an n-qubit system.
 
@@ -273,7 +294,6 @@ def _i_z(i: int, n: int) -> np.ndarray:
 
     return result
 
-
 def _n_z(h_n: np.ndarray) -> np.ndarray:
     """Generate an n-qubit Z gate from the n-qubit Hadamard matrix.
 
@@ -287,7 +307,6 @@ def _n_z(h_n: np.ndarray) -> np.ndarray:
     res = np.sign(res)
     res = np.diag(res)
     return res
-
 
 def _modified_LHC(n: int, n_samples: int, n_div: int) -> np.ndarray:
     """Generate samples using modified Latin Hypercube Sampling.
@@ -314,7 +333,6 @@ def _modified_LHC(n: int, n_samples: int, n_div: int) -> np.ndarray:
 
     return samples
 
-
 def _sobol_sampling(n: int, n_samples: int) -> np.ndarray:
     """Generate samples using Sobol sequence sampling.
 
@@ -329,7 +347,6 @@ def _sobol_sampling(n: int, n_samples: int) -> np.ndarray:
     p = 2 * np.pi * sampler.random(n_samples)
     return p
 
-
 def _phi_i(x_vecs: np.ndarray, i: int) -> np.ndarray:
     """Compute the φ_i term for a given dimension.
 
@@ -341,7 +358,6 @@ def _phi_i(x_vecs: np.ndarray, i: int) -> np.ndarray:
         np.ndarray: Computed φ_i values.
     """
     return x_vecs[:, i].reshape((-1, 1))
-
 
 def _phi_ij(x_vecs: np.ndarray, i: int, j: int) -> np.ndarray:
     """Compute the φ_ij term for given dimensions.
@@ -356,5 +372,57 @@ def _phi_ij(x_vecs: np.ndarray, i: int, j: int) -> np.ndarray:
     """
     return ((np.pi - x_vecs[:, i]) * (np.pi - x_vecs[:, j])).reshape((-1, 1))
 
-# Uncomment to test
-# print(ad_hoc_data(10,10,5,0.1,3))
+def _random_unitary(dims):
+    A = np.array(algorithm_globals.random.random((dims, dims)) 
+                + 1j * algorithm_globals.random.random((dims, dims)))
+    Herm = A.conj().T @ A 
+    eigvals, eigvecs = np.linalg.eig(Herm)
+    idx = eigvals.argsort()[::-1]
+    V = eigvecs[:, idx]
+    return V
+
+def _loop_sampling(n, n_samples, z_diags, zz_diags, O, h_n, lab_fn, samp_fn):
+    
+    features = np.empty((n_samples, n), dtype=float)
+    labels = np.empty(n_samples, dtype=int)
+    dims = 2**n
+    cur = 0
+
+    while n_samples > 0:
+        # Stratified Sampling for x vector
+        x_vecs = samp_fn(n, n_samples)    
+
+        # Seperable ZZFeaturemap: exp(sum j phi Zi + sum j phi Zi Zj)
+        ind_pairs = zz_diags.keys()
+        pre_exp = np.zeros((n_samples, dims))
+
+        # First Order Terms
+        for i in range(n):
+            pre_exp += _phi_i(x_vecs, i)*z_diags[i]
+        # Second Order Terms 
+        for (i,j) in ind_pairs:
+            pre_exp += _phi_ij(x_vecs, i, j)*zz_diags[(i,j)]
+        
+        # Since pre_exp is purely diagonal, exp(A) = diag(exp(Aii))
+        post_exp = np.exp(1j * pre_exp)
+        Uphi = np.zeros((n_samples, dims, dims), dtype = post_exp.dtype)
+        cols = range(dims)
+        Uphi[:,cols, cols] = post_exp[:, cols]
+
+        Psi = (Uphi @ h_n @ Uphi @ psi_0).reshape((-1, dims, 1))
+
+        # Labelling
+        raw_labels = lab_fn(Psi)
+        indx = np.abs(raw_labels)>0
+        count = np.sum(indx)
+        features[cur:cur+count] = x_vecs[indx]
+        labels[cur:cur+count] = np.sign(raw_labels[indx])
+
+        n_samples -= count
+        cur += count
+
+def _exp_label(Psi):
+    Psi_dag = np.transpose(Psi.conj(), (0, 2, 1))
+    exp_val = np.real(Psi_dag @ O @ Psi).flatten()
+    labels = (np.abs(exp_val)>gap)*(np.sign(exp_val))
+    return labels
