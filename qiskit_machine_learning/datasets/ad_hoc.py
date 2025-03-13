@@ -176,7 +176,7 @@ def ad_hoc_data(
         )
         plot_data = False
 
-    if sampling_method=="grid" and n_samples>4000:
+    if sampling_method=="grid" and (training_size+test_size)>4000:
         warnings.warn(
             "Grid Sampling for large number of samples is not recommended.",
             UserWarning
@@ -232,7 +232,8 @@ def ad_hoc_data(
             samp_fn = lambda a, b: _sobol_sampling(a, b)
 
         a_features, b_features = _loop_sampling(
-            n, n_samples, z_diags, zz_diags, O, psi_0, h_n, lab_fn, samp_fn
+            n, n_samples, z_diags, zz_diags, O, psi_0, h_n, 
+            lab_fn, samp_fn, sampling_method
         )
 
     if plot_data:
@@ -243,9 +244,9 @@ def ad_hoc_data(
     res[0] = np.concatenate(
         (a_features[:training_size], b_features[:training_size]), axis=0
     )
-    res[1] = [[class_labels[0]] * training_size + [class_labels[1]] * training_size]
+    res[1] = np.array([[class_labels[0]] * training_size + [class_labels[1]] * training_size])
     res[2] = np.concatenate((a_features[training_size:], b_features[training_size:]), axis=0)
-    res[3] = [[class_labels[0]] * test_size + [class_labels[1]] * test_size]
+    res[3] = np.array([[class_labels[0]] * test_size + [class_labels[1]] * test_size])
 
     if one_hot:
         res[1] = _onehot_labels(res[1])
@@ -434,7 +435,7 @@ def _random_unitary(dims):
 
 
 def _loop_sampling(
-    n, n_samples, z_diags, zz_diags, O, psi_0, h_n, lab_fn, samp_fn
+    n, n_samples, z_diags, zz_diags, O, psi_0, h_n, lab_fn, samp_fn, sampling_method
 ):
     """
     Loop-based sampling routine to allocate feature vectors into two classes.
@@ -463,10 +464,16 @@ def _loop_sampling(
     a_needed, b_needed = n_samples, n_samples
 
     while a_needed > 0 or b_needed > 0:
-        # Stratified Sampling for x vector
-        x_vecs = samp_fn(n, a_needed + b_needed)
+        n_pass = a_needed + b_needed
 
-        pre_exp = np.zeros((n_samples, dims))
+        # Sobol works better with a 2^n just above n_pass
+        if sampling_method=="sobol": 
+            n_pass = 2 ** ((n_pass - 1).bit_length())
+
+        # Stratified Sampling for x vector
+        x_vecs = samp_fn(n, n_pass)
+
+        pre_exp = np.zeros((n_pass, dims))
 
         # First Order Terms
         for i in range(n):
@@ -477,7 +484,7 @@ def _loop_sampling(
 
         # Since pre_exp is purely diagonal, exp(A) = diag(exp(Aii))
         post_exp = np.exp(1j * pre_exp)
-        Uphi = np.zeros((n_samples, dims, dims), dtype=post_exp.dtype)
+        Uphi = np.zeros((n_pass, dims, dims), dtype=post_exp.dtype)
         cols = range(dims)
         Uphi[:, cols, cols] = post_exp[:, cols]
 
@@ -488,14 +495,14 @@ def _loop_sampling(
         
         if a_needed>0:
             a_indx = (raw_labels == 1)
-            a_count = min(np.sum(a_indx), a_needed)
+            a_count = min(int(np.sum(a_indx)), a_needed)
             a_features[a_cur:a_cur+a_count] = x_vecs[a_indx][:a_count]
             a_cur+=a_count
             a_needed-=a_count
 
         if b_needed>0:
             b_indx = (raw_labels==-1)
-            b_count = min(np.sum(b_indx), b_needed)
+            b_count = min(int(np.sum(b_indx)), b_needed)
             b_features[b_cur:b_cur+b_count] = x_vecs[b_indx][:b_count]
             b_cur+=b_count
             b_needed-=b_count
@@ -592,11 +599,12 @@ def _grid_sampling(
         for i in range(n):
             pre_exp += x_arr[i] * z_diags[i]
         for (i, j) in zz_diags.keys():
-            pre_exp += ((np.pi - x_arr[i]) * (np.pi - x_arr[j])) * z_diags[(i, j)]
+            pre_exp += ((np.pi - x_arr[i]) * (np.pi - x_arr[j])) * zz_diags[(i, j)]
 
-        Uphi = np.diag(np.exp(1j * pre_exp))
+        Uphi = np.diag(np.exp(1j * pre_exp.flatten()))
+
         psi = Uphi @ h_n @ Uphi @ psi_0
-        label = lab_fn(psi)
+        label = lab_fn(psi.reshape((1,-1, 1)))
 
         grid_labels.append(label)
 
@@ -616,5 +624,3 @@ def _grid_sampling(
             b_features.append([xvals[d] for d in draws])
 
     return np.array(a_features), np.array(b_features)
-
-
