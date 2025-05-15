@@ -22,7 +22,7 @@ from vqe import VQE
 from hamiltonians.hamiltonian_base import QuantumDataGenerator
 
 
-def generate_dataset(
+def phase_of_matter_data(
     model_name: str,
     num_qubits: int = 3,
     num_samples: int = 10,
