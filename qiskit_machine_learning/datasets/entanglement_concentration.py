@@ -326,10 +326,3 @@ def _isotropic(n_qubits: int, n_points: int) -> np.ndarray:
     amplitudes = picked.squeeze(-1).prod(axis=2)
 
     return amplitudes[:, :, None]
-
-import time
-start = time.perf_counter()
-p = entanglement_concentration_data(100000, 10, 8, sampling_method="isotropic")
-elapsed = time.perf_counter() - start
-print(f"{elapsed:.6f} s")
-print(p[0].shape, p[1].shape, p[2], p[3])

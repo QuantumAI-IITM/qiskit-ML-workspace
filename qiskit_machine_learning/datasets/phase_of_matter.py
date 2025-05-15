@@ -304,6 +304,3 @@ def run_example():
 
     print("Example datasets generated and saved to CSV files.")
 
-
-if __name__ == "__main__":
-    run_example()
