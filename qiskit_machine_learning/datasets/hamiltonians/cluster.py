@@ -6,7 +6,7 @@ This module implements the Cluster model with Z, XX, and XZX interactions.
 
 import numpy as np
 from qiskit.quantum_info import SparsePauliOp
-from qiskit_machine_learning.datasets.phase_generator.hamiltonians.hamiltonian_base import HamiltonianModel
+from qiskit_machine_learning.datasets.hamiltonians.hamiltonian_base import HamiltonianModel
 
 class ClusterModel(HamiltonianModel):
     """Cluster Model with Z, XX, and XZX interactions.

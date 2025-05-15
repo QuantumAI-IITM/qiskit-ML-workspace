@@ -10,16 +10,16 @@ import pandas as pd
 from typing import Optional, Dict, Any, Union, List, Tuple
 
 # Import the Hamiltonian models
-from qiskit_machine_learning.datasets.phase_generator.hamiltonians.heisenberg import HeisenbergXXX
-from qiskit_machine_learning.datasets.phase_generator.hamiltonians.haldane_chain import HaldaneChain
-from qiskit_machine_learning.datasets.phase_generator.hamiltonians.annni import ANNNIModel
-from qiskit_machine_learning.datasets.phase_generator.hamiltonians.cluster import ClusterModel
+from qiskit_machine_learning.datasets.hamiltonians.heisenberg import HeisenbergXXX
+from qiskit_machine_learning.datasets.hamiltonians.haldane_chain import HaldaneChain
+from qiskit_machine_learning.datasets.hamiltonians.annni import ANNNIModel
+from qiskit_machine_learning.datasets.hamiltonians.cluster import ClusterModel
 
 # Import VQE implementation
-from vqe import VQE
+from .vqe import VQE
 
 # Import the QuantumDataGenerator
-from hamiltonians.hamiltonian_base import QuantumDataGenerator
+from qiskit_machine_learning.datasets.hamiltonians.hamiltonian_base import QuantumDataGenerator
 
 
 def phase_of_matter_data(

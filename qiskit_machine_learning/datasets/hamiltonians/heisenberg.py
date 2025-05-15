@@ -6,7 +6,7 @@ This module implements the Heisenberg XXX model with bond-alternating couplings.
 
 import numpy as np
 from qiskit.quantum_info import SparsePauliOp
-from qiskit_machine_learning.datasets.phase_generator.hamiltonians.hamiltonian_base import HamiltonianModel
+from qiskit_machine_learning.datasets.hamiltonians.hamiltonian_base import HamiltonianModel
 
 class HeisenbergXXX(HamiltonianModel):
     """Heisenberg XXX model with bond-alternating couplings.
